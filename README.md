@@ -1,104 +1,123 @@
 # Golden Customer Segmentation
 
-A **customer segmentation project for a jewellery retailer**, built end-to-end:
+Customer segmentation for a multi-channel jewellery retailer, built end to end
+in R: a messy transaction export goes in, an RFM-scored and segmented customer
+table comes out.
 
-- **Agile / Jira-style artefacts** – product backlog, user stories with acceptance
-  criteria, a sprint board and a workflow with Definition of Ready / Done
-- **Confluence-style specification** – the full project methodology documented as
-  a spec page (objectives, data dictionary, method, acceptance criteria, decisions)
-- **Reproducible R pipeline** – data preparation + RFM scoring + rules-based
-  segmentation with a complementary k-means view, run on synthetic sample data
+The repository also contains the project-management artefacts that would
+normally live in Jira and Confluence, so the whole delivery — backlog, sprint
+board, methodology spec, code — is in one place.
 
-> This is a portfolio project: it demonstrates hands-on experience with agile
-> project management tools (Jira, Confluence) **and** with the analytics workflow
-> (R, data cleaning, RFM / clustering) that a retail analyst would own.
+## Business question
 
-## Business context
+The retailer sells through boutiques, a flagship store and an e-commerce site,
+and currently treats every customer identically. The question this project
+answers: **which customers are worth the most, and how should marketing treat
+each group differently?**
 
-A multi-channel jewellery retailer (boutiques, flagship store, e-commerce) wants
-to move from "all customers treated the same" to segment-specific marketing and
-inventory decisions. The project answers one question:
-
-> **Who are our most valuable customers, and how should marketing treat each
-> segment differently?**
-
-## Repository structure
+## What is in here
 
 ```
 golden-customer-segmentation/
-├── agile/                        # Jira-style project management artefacts
+├── agile/                        # project-management artefacts
 │   ├── 01-product-backlog.md     # epics + prioritised user stories
-│   ├── 02-user-stories.md        # detailed stories with acceptance criteria
-│   ├── 03-sprint-board.md        # 2-week sprint board walkthrough
+│   ├── 02-user-stories.md        # stories with acceptance criteria
+│   ├── 03-sprint-board.md        # two-week sprint walkthrough
 │   └── 04-workflow-and-definition-of-done.md
 ├── docs/
 │   └── confluence-spec-golden-customer-segmentation.md   # methodology spec
 ├── analysis/
-│   ├── 01-data-preparation.R     # clean + build customer-level RFM table
-│   └── 02-rfm-segmentation.R     # RFM scoring, segmentation, k-means
+│   ├── 01-data-preparation.R     # clean transactions -> customer-level RFM
+│   └── 02-rfm-segmentation.R     # RFM scoring, segmentation, k-means check
 ├── data/
 │   ├── 00_generate_sample_data.py  # deterministic synthetic data generator
 │   ├── customer_master.csv         # 352 customers
-│   └── customer_transactions.csv   # ~930 orders (with realistic data issues)
+│   └── customer_transactions.csv   # 934 orders (with deliberate data issues)
 ├── analysis_output/             # created at runtime (gitignored)
 └── README.md
 ```
 
-## How to run
+The customer data is synthetic. The generator injects the problems a real CRM
+export usually has, so the cleaning steps have something to do: duplicate
+transaction IDs, blank channel values, refunds recorded as negative lines,
+transactions pointing at customers who are not in the master table, and
+customers who never ordered at all.
 
-Requirements: **R ≥ 4.1** with the `tidyverse` packages (`readr`, `dplyr`,
-`stringr`). Sample data is already committed, so no data generation is needed:
+## Running it
+
+R 4.1 or newer with `readr`, `dplyr` and `stringr`. Both sample CSVs are
+committed, so the pipeline runs as-is:
 
 ```r
 # from the repository root
 source("analysis/01-data-preparation.R")   # -> analysis_output/customer_rfm.csv
-source("analysis/02-rfm-segmentation.R")   # -> segment_profiles.csv + charts
+source("analysis/02-rfm-segmentation.R")   # -> segment_profiles.csv + two charts
 ```
 
-To regenerate the sample data from scratch:
+To rebuild the sample data from scratch (Python 3, no dependencies):
 
 ```bash
 python data/00_generate_sample_data.py
 ```
 
-## Methodology (summary)
+The generator is seeded, so the sample stays stable across runs.
 
-1. **Data preparation** – deduplicate transactions, exclude refunds, normalise
-   missing channels, drop orphan transactions, then aggregate to customer level:
-   **Recency** (days since last order), **Frequency** (number of orders),
-   **Monetary** (total revenue).
-2. **RFM scoring** – each customer is scored 1–5 per dimension (quintiles,
-   5 = best), giving a composite 3–15 score.
-3. **Segmentation** – business rules map RFM scores to segments
-   (Champions, Loyal Customers, At Risk – High Value, At Risk, New Customers,
-   Hibernating, Lost, Needs Attention).
-4. **Validation view** – k-means (k = 4) on log-scaled RFM as a data-driven
-   cross-check of the rule-based segments.
+## Method
 
-Full details: [docs/confluence-spec-golden-customer-segmentation.md](docs/confluence-spec-golden-customer-segmentation.md)
+1. **Cleaning** (`01-data-preparation.R`) — drop duplicate transaction IDs,
+   exclude refunds and negative lines, fill blank channels with `Unknown`, drop
+   transactions whose customer is missing from the master table.
+2. **RFM** — per customer: days since last order, number of orders, total
+   revenue. The reference date is fixed at 2026-09-01 so output is stable.
+3. **Scoring** (`02-rfm-segmentation.R`) — each dimension is cut into quintiles,
+   5 being best, giving a 3–15 composite score.
+4. **Segmentation** — business rules map the scores to eight segments. The
+   rules are evaluated in order, first match wins:
 
-## Key results (sample data)
+   | Segment | Rule |
+   | --- | --- |
+   | Champions | R = 5, F ≥ 4, M ≥ 4 |
+   | Loyal Customers | R ≥ 4, F ≥ 3, M ≥ 3 |
+   | New Customers | R = 5, F ≤ 2 |
+   | At Risk – High Value | R ≤ 2, M ≥ 4 |
+   | At Risk | R ≤ 2, M ≥ 2 |
+   | Lost | R = 1, F ≤ 2, M ≤ 2 |
+   | Hibernating | R = 2, F ≤ 2, M ≤ 2 |
+   | Needs Attention | everything else |
 
-| Segment | Customers | Revenue share | Typical behaviour |
-|---|---|---|---|
-| Champions | ~8% | high | buy recently, often, and big |
-| Loyal Customers | ~16% | high | steady, valuable repeat buyers |
-| At Risk – High Value | ~12% | high | big spenders who stopped buying |
-| At Risk | ~15% | medium | declining frequency |
-| New Customers | ~5% | low | first recent orders |
-| Hibernating / Lost | ~12% | low | long absence, low value |
-| Needs Attention | ~33% | medium | average on all dimensions |
+   `Lost` is a subset of the conditions that define `Hibernating`, so it has to
+   be tested first; otherwise it can never be reached.
+5. **Cross-check** — k-means (k = 4) on log-transformed RFM, as a data-driven
+   second opinion on the rule-based segments. The script prints the
+   segment-by-cluster cross-tabulation.
 
-(*Exact figures depend on the generated sample; run the pipeline to reproduce.*)
+Full methodology, data dictionary and acceptance criteria are in
+[docs/confluence-spec-golden-customer-segmentation.md](docs/confluence-spec-golden-customer-segmentation.md).
 
-## What this shows an interviewer
+## Result on the sample data
 
-- **Jira:** you can write user stories, acceptance criteria, plan a sprint,
-  and reason about a workflow with explicit Definition of Ready / Done.
-- **Confluence:** you can document a methodology in a structured, shareable spec.
-- **Analytics:** you can clean real-world-messy data in R, build an RFM model,
-  and translate statistical output into business segments.
+328 of the 352 customers have at least one valid order; the other 24 are
+dormant and get `NA` RFM values.
+
+| Segment | Customers | % customers | % revenue | Avg recency (days) | Avg orders | Avg spend |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Champions | 23 | 7.0 | 12.2 | 37 | 4.7 | €6,562 |
+| Loyal Customers | 52 | 15.9 | 25.1 | 105 | 4.0 | €5,963 |
+| At Risk – High Value | 38 | 11.6 | 20.6 | 456 | 3.1 | €6,694 |
+| At Risk | 50 | 15.2 | 7.2 | 567 | 2.0 | €1,787 |
+| New Customers | 18 | 5.5 | 4.0 | 43 | 1.7 | €2,769 |
+| Lost | 23 | 7.0 | 0.6 | 766 | 1.1 | €347 |
+| Hibernating | 17 | 5.2 | 0.6 | 426 | 1.4 | €467 |
+| Needs Attention | 107 | 32.6 | 29.5 | 203 | 2.9 | €3,410 |
+
+The two high-value groups (Champions and At Risk – High Value) hold 33% of
+revenue between them on 18% of the customer base, which is the actionable
+part: the At Risk – High Value group spends like Champions but has not ordered
+in over a year.
+
+Figures come from a reference run against the committed sample data; R's
+quintile tie-breaking can shift the exact counts by a customer or two.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

@@ -44,8 +44,12 @@ active <- active %>%
     r_score == 5 & f_score <= 2                 ~ "New Customers",
     r_score <= 2 & m_score >= 4                 ~ "At Risk - High Value",
     r_score <= 2 & m_score >= 2                 ~ "At Risk",
+    # "Lost" must be tested before "Hibernating": the former is a subset of the
+    # latter, so with the previous order it could never be reached and no
+    # customer was ever labelled Lost. Hibernating is therefore narrowed to
+    # r_score == 2 (stale but not the least-recent quintile).
     r_score == 1 & f_score <= 2 & m_score <= 2  ~ "Lost",
-    r_score <= 2 & f_score <= 2 & m_score <= 2  ~ "Hibernating",
+    r_score == 2 & f_score <= 2 & m_score <= 2  ~ "Hibernating",
     TRUE                                        ~ "Needs Attention"
   ))
 
@@ -57,7 +61,6 @@ km_input <- active %>%
   mutate(across(everything(), ~ log1p(.x))) %>%
   scale()
 
-set.seed(2026)
 km <- kmeans(km_input, centers = 4, nstart = 25)
 active$cluster <- km$cluster
 

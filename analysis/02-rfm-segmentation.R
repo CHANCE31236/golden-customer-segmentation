@@ -6,10 +6,11 @@
 #   2. Scores customers 1-5 on Recency / Frequency / Monetary (quintiles)
 #   3. Assigns a business segment using a rules-based framework
 #   4. Runs k-means (k = 4) as a complementary, data-driven view
-#   5. Writes `analysis_output/segment_profiles.csv` + two base-R charts
+#   5. Writes customer assignments, segment profiles and two base-R charts
 #
 # Input : analysis_output/customer_rfm.csv
-# Output: analysis_output/segment_profiles.csv
+# Output: analysis_output/customer_segments.csv
+#         analysis_output/segment_profiles.csv
 #         analysis_output/segment_customer_share.png
 #         analysis_output/segment_revenue_share.png
 # =============================================================================
@@ -23,7 +24,7 @@ OUT_DIR <- "analysis_output"
 rfm <- read_csv(file.path(OUT_DIR, "customer_rfm.csv"), show_col_types = FALSE)
 
 # segmentation applies to customers with at least one valid order
-active <- rfm %>% filter(!is.na(recency_days))
+active <- rfm %>% filter(!is.na(recency_days)) %>% arrange(customer_id)
 cat("Active customers analysed:", nrow(active), "\n\n")
 
 # --- 2. RFM scores (quintiles, 5 = best) ----------------------------------------
@@ -44,10 +45,7 @@ active <- active %>%
     r_score == 5 & f_score <= 2                 ~ "New Customers",
     r_score <= 2 & m_score >= 4                 ~ "At Risk - High Value",
     r_score <= 2 & m_score >= 2                 ~ "At Risk",
-    # "Lost" must be tested before "Hibernating": the former is a subset of the
-    # latter, so with the previous order it could never be reached and no
-    # customer was ever labelled Lost. Hibernating is therefore narrowed to
-    # r_score == 2 (stale but not the least-recent quintile).
+    # Lost covers the least-recent quintile; Hibernating covers the next one.
     r_score == 1 & f_score <= 2 & m_score <= 2  ~ "Lost",
     r_score == 2 & f_score <= 2 & m_score <= 2  ~ "Hibernating",
     TRUE                                        ~ "Needs Attention"
@@ -63,6 +61,8 @@ km_input <- active %>%
 
 km <- kmeans(km_input, centers = 4, nstart = 25)
 active$cluster <- km$cluster
+write_csv(active, file.path(OUT_DIR, "customer_segments.csv"))
+cat("Saved:", file.path(OUT_DIR, "customer_segments.csv"), "\n")
 
 cat("K-means cluster sizes:", paste(km$size, collapse = ", "), "\n\n")
 

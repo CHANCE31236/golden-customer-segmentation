@@ -146,7 +146,7 @@ to understand:
 | R≤2 and M≥4 | At Risk – High Value |
 | R≤2 and M≥2 | At Risk |
 | R=1 and F≤2 and M≤2 | Lost |
-| R≤2 and F≤2 and M≤2 | Hibernating |
+| R=2 and F≤2 and M≤2 | Hibernating |
 | otherwise | Needs Attention |
 
 4. **Cross-check:** k-means (k = 4) on log-transformed, scaled RFM;

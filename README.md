@@ -46,12 +46,13 @@ customers who never ordered at all.
 ## Running it
 
 R 4.1 or newer with `readr`, `dplyr` and `stringr`. Both sample CSVs are
-committed, so the pipeline runs as-is:
+committed. Install the dependencies, then run from the repository root:
 
 ```r
+install.packages(c("readr", "dplyr", "stringr"))  # once
 # from the repository root
 source("analysis/01-data-preparation.R")   # -> analysis_output/customer_rfm.csv
-source("analysis/02-rfm-segmentation.R")   # -> segment_profiles.csv + two charts
+source("analysis/02-rfm-segmentation.R")   # -> customer_segments.csv, segment_profiles.csv + two charts
 ```
 
 To rebuild the sample data from scratch (Python 3, no dependencies):
@@ -85,8 +86,8 @@ The generator is seeded, so the sample stays stable across runs.
    | Hibernating | R = 2, F ≤ 2, M ≤ 2 |
    | Needs Attention | everything else |
 
-   `Lost` is a subset of the conditions that define `Hibernating`, so it has to
-   be tested first; otherwise it can never be reached.
+   The rules are evaluated in order. `Lost` uses R = 1 and `Hibernating`
+   uses R = 2, so the two recency conditions are distinct.
 5. **Cross-check** — k-means (k = 4) on log-transformed RFM, as a data-driven
    second opinion on the rule-based segments. The script prints the
    segment-by-cluster cross-tabulation.
@@ -101,22 +102,30 @@ dormant and get `NA` RFM values.
 
 | Segment | Customers | % customers | % revenue | Avg recency (days) | Avg orders | Avg spend |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Champions | 23 | 7.0 | 12.2 | 37 | 4.7 | €6,562 |
-| Loyal Customers | 52 | 15.9 | 25.1 | 105 | 4.0 | €5,963 |
-| At Risk – High Value | 38 | 11.6 | 20.6 | 456 | 3.1 | €6,694 |
-| At Risk | 50 | 15.2 | 7.2 | 567 | 2.0 | €1,787 |
-| New Customers | 18 | 5.5 | 4.0 | 43 | 1.7 | €2,769 |
-| Lost | 23 | 7.0 | 0.6 | 766 | 1.1 | €347 |
-| Hibernating | 17 | 5.2 | 0.6 | 426 | 1.4 | €467 |
-| Needs Attention | 107 | 32.6 | 29.5 | 203 | 2.9 | €3,410 |
+| Champions | 25 | 7.6 | 13.7 | 40.2 | 4.6 | €6,777 |
+| Loyal Customers | 50 | 15.2 | 23.8 | 101.7 | 3.9 | €5,874 |
+| At Risk – High Value | 38 | 11.6 | 20.6 | 456.3 | 3.1 | €6,694 |
+| At Risk | 50 | 15.2 | 7.2 | 566.6 | 2 | €1,787 |
+| New Customers | 18 | 5.5 | 3 | 42.5 | 1.7 | €2,082 |
+| Lost | 24 | 7.3 | 0.7 | 769.2 | 1.1 | €364 |
+| Hibernating | 15 | 4.6 | 0.6 | 427.8 | 1.3 | €461 |
+| Needs Attention | 108 | 32.9 | 30.4 | 203.4 | 2.9 | €3,476 |
 
-The two high-value groups (Champions and At Risk – High Value) hold 33% of
-revenue between them on 18% of the customer base, which is the actionable
-part: the At Risk – High Value group spends like Champions but has not ordered
-in over a year.
+The values describe the committed synthetic sample. Customers are sorted by
+`customer_id` before scoring so quintile tie-breaking and k-means inputs stay
+stable when input rows are reordered. `customer_segments.csv` contains the
+RFM scores, segment, and cluster assignment for each active customer.
 
-Figures come from a reference run against the committed sample data; R's
-quintile tie-breaking can shift the exact counts by a customer or two.
+## Validation
+
+```bash
+Rscript --vanilla tests/smoke.R
+```
+
+The smoke check runs the pipeline in a temporary directory and verifies the
+916 valid transactions, 328 active and 24 dormant customers, quality counters,
+customer assignments, generated charts, and stable results under row reordering.
+GitHub Actions runs the same checks for every pull request.
 
 ## License
 

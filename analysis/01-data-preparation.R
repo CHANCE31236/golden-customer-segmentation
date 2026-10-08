@@ -12,8 +12,7 @@
 # Input : data/customer_master.csv, data/customer_transactions.csv
 # Output: analysis_output/customer_rfm.csv
 #
-# Run:  setwd("..") then source("analysis/01-data-preparation.R")
-#       or run from an RStudio project rooted at the repo.
+# Run from the repository root: source("analysis/01-data-preparation.R")
 # =============================================================================
 
 library(readr)
@@ -39,7 +38,8 @@ txn_clean <- transactions %>%
   # 2.1 remove duplicated transaction ids (keep first occurrence)
   distinct(transaction_id, .keep_all = TRUE) %>%
   # 2.2 keep only genuine sales (drop refunds / negative lines)
-  filter(reason_code != "R", quantity > 0, revenue_eur > 0) %>%
+  # Empty reason codes are imported as NA and denote ordinary sales.
+  filter(coalesce(reason_code, "") != "R", quantity > 0, revenue_eur > 0) %>%
   # 2.3 parse order date
   mutate(order_date = as.Date(order_date)) %>%
   # 2.4 normalise channel: blank / missing values -> "Unknown"
@@ -49,9 +49,11 @@ txn_clean <- transactions %>%
   mutate(is_orphan = !(customer_id %in% valid_ids))
 
 n_duplicated <- sum(duplicated(transactions$transaction_id))
-n_refunds    <- sum(transactions$reason_code == "R" | transactions$quantity < 0)
+n_refunds    <- sum(transactions$reason_code == "R" |
+                    transactions$quantity <= 0 | transactions$revenue_eur <= 0,
+                    na.rm = TRUE)
 n_orphans    <- sum(txn_clean$is_orphan)
-n_blank_ch   <- sum(transactions$channel == "")
+n_blank_ch   <- sum(is.na(transactions$channel) | str_trim(transactions$channel) == "")
 
 cat("Data quality issues found and handled:\n")
 cat("  duplicated transaction ids :", n_duplicated, "(deduplicated)\n")
